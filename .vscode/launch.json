@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "Debug",
+      "url": "http://192.168.0.46:9090/",
+      "webRoot": "${workspaceFolder}",
+      "sourceMaps": true,
+      "runtimeExecutable": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+    }
+  ]
+}
