@@ -1,8 +1,8 @@
 import { vec3, mat4 } from "gl-matrix";
 
-const worldUp: vec3 = [0, 1, 0];
-const near = 0.1;
-const far = 1000.0;
+const worldUp: vec3 = vec3.fromValues(0, 1, 0);
+const near = 0.2;
+const far = 10000.0;
 
 export default class Camera {
   public freeMouse: boolean = true;
@@ -15,6 +15,7 @@ export default class Camera {
   public viewMatrix: mat4 = mat4.create();
   public projectionMatrix: mat4 = mat4.create();
   public inverseProjectionMatrix: mat4 = mat4.create();
+  public bufferSize: number;
 
   constructor(
     viewportWidth: number,
@@ -30,6 +31,20 @@ export default class Camera {
     this.yaw = yaw;
     this.pitch = pitch;
     this.fov = fov;
+    this.bufferSize = this.getBufferSize();
+  }
+
+  // Buffer size for ubo
+  getBufferSize(): number {
+    let bufferSize: number =
+      // view matrix
+      16 * 4 +
+      // projectionMatrix
+      16 * 4 +
+      // position vector (std140 layout rounds it to 16 bytes)
+      4 * 4;
+
+    return bufferSize;
   }
 
   // Camera movements
@@ -78,13 +93,19 @@ export default class Camera {
 
   getDown(): vec3 {
     const down = vec3.create();
-    vec3.negate(down, this.getDown());
+    vec3.negate(down, this.getUp());
     return down;
   }
 
   updateViewMatrix() {
     const viewMatrix = mat4.create();
-    mat4.lookAt(viewMatrix, this.position, this.getForward(), worldUp);
+
+    const target = vec3.create();
+    vec3.add(target, this.position, this.getForward());
+
+    // const target = vec3.fromValues(0, 0, 0);
+
+    mat4.lookAt(viewMatrix, this.position, target, worldUp);
 
     this.viewMatrix = viewMatrix;
   }
@@ -92,9 +113,9 @@ export default class Camera {
   updatePerspectiveMatrix() {
     const projection = mat4.create();
 
-    mat4.perspective(
+    mat4.perspectiveNO(
       projection,
-      90, // vertical field of view
+      this.fov, // vertical field of view
       this.viewportWidth / this.viewportHeight, // width / height
       near, // > 0
       far,

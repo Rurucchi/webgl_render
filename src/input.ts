@@ -7,6 +7,11 @@ interface Direction {
   down: boolean;
 }
 
+interface mousePosition {
+  x: number;
+  y: number;
+}
+
 // TODO: mouse movement w/ pitch & yaw
 
 export default class Input {
@@ -27,6 +32,8 @@ export default class Input {
   };
   public keys: Record<string, boolean> = {};
   public pressedThisFrame: Record<string, boolean> = {};
+  public mousePos: mousePosition = { x: 0, y: 0 };
+  public mouseFree: boolean = true;
 
   getInputs() {
     // forward
@@ -70,6 +77,16 @@ export default class Input {
     } else {
       this.directions.down = false;
     }
+
+    // mouse mode
+    // if (this.keys[this.mouseMode] && !this.mouseFree) {
+    //   this.mouseFree = !this.mouseFree;
+    //   document.exitPointerLock();
+    // }
+
+    // get mouse position
+    if (!this.mouseFree) {
+    }
   }
 
   // this is used to filter opposite inputs to avoid computing useless movement vectors (this assumes that movement speed is equal in all directions)
@@ -106,8 +123,19 @@ export default class Input {
     addEventListener("keyup", (e) => {
       this.keys[e.code] = false;
     });
+
+    document.addEventListener("mousemove", (e) => {
+      if (document.pointerLockElement) {
+        this.mousePos.x = e.movementX;
+        this.mousePos.y = e.movementY;
+        if ((this.mouseFree = true)) {
+          this.mouseFree = false;
+        }
+      }
+    });
   }
 
+  // Frame based input check
   update() {
     this.getInputs();
     this.filterInputs();
