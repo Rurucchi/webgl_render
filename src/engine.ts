@@ -314,7 +314,7 @@ class Engine {
 
     if (vec3.length(movement) > 0) {
       vec3.normalize(movement, movement);
-      vec3.scale(movement, movement, speed * (delta / 1000));
+      vec3.scale(movement, movement, speed / fps);
       vec3.add(this.camera.position, this.camera.position, movement);
     }
 
