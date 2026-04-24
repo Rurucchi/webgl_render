@@ -233,7 +233,9 @@ class Engine {
     });
 
     // loading GLTF
-    const processedGLTF = await this.gltfModel.loadAssets("assets/Sponza.gltf");
+    const processedGLTF = await this.gltfModel.loadAssets(
+      `${import.meta.env.BASE_URL}assets/Sponza.gltf`,
+    );
 
     // TODO: Thread this, too heavy on startup
     if (processedGLTF) {

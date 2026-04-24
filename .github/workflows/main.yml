@@ -1,11 +1,12 @@
 name: GitHub Pages Deployment
 run-name: ${{ github.actor }} has started the deployment.
+
 on:
   push:
     branches:
       - main
 
-  permissions:
+permissions:
   contents: read
   pages: write
   id-token: write
@@ -21,7 +22,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 25
           cache: npm
 
       - name: Install dependencies

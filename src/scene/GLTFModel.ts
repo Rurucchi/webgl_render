@@ -10,7 +10,7 @@ export default class GLTFModel {
     // Load and parse a file
     try {
       const gltfWithBuffers: GLTFWithBuffers = await load(url, GLTFLoader, {
-        baseUri: "/assets/",
+        baseUri: `${import.meta.env.BASE_URL}assets/`,
         fetch: async (url: string) => {
           console.log("FETCH:", url);
           const res = await fetch(url);
