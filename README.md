@@ -1,17 +1,13 @@
-# 🎮 WebGL Renderer
+# WebGL Sponza Renderer
 
-![WebGL](https://img.shields.io/badge/WebGL-2.0-blue)
-![GLTF](https://img.shields.io/badge/Scene-GLTF%20Sponza-green)
-![Lighting](https://img.shields.io/badge/Lighting-Blinn--Phong-amber)
-
-A WebGL renderer built from scratch, featuring the classic Sponza scene loaded via GLTF, real-time Blinn-Phong lighting, and an interactive first-person camera system.
+A WebGL renderer built from scratch, GLTF loading, real-time Blinn-Phong lighting and a first-person camera system.
 
 ## Features
 
-- **GLTF scene loading** — parses and renders the Sponza atrium scene with full mesh and material support
-- **Blinn-Phong lighting** — per-fragment shading with ambient, diffuse, and specular components
-- **Camera system** — mouse-look and keyboard-driven movement for real-time scene exploration
-- **Raw WebGL** — no rendering engine dependencies; built directly on the WebGL API
+- GLTF scene loading
+- Blinn-Phong lighting model
+- Camera system
+- Raw WebGL
 
 ## Getting Started
 

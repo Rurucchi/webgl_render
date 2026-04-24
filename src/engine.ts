@@ -387,7 +387,7 @@ class Engine {
     sunData.set(this.sun.color, 4);
 
     /* rendering */
-    gl.clearColor(0.5, 0.5, 0.5, 1.0);
+    gl.clearColor(0.5, 0.6, 0.7, 0.5);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     // useProgram
