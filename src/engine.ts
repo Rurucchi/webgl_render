@@ -1,5 +1,5 @@
 import { vec3 } from "gl-matrix";
-import { ImGui, ImGuiImplWeb } from "@mori2003/jsimgui";
+import { ImGui, ImGuiImplWeb, ImVec2 } from "@mori2003/jsimgui";
 
 // shaders
 import vs from "./shaders/vertexShader";
@@ -25,7 +25,7 @@ import {
 /* Constants */
 
 // units per second
-const speed = 400;
+const speed = 500;
 
 class Engine {
   // Rendering
@@ -314,7 +314,7 @@ class Engine {
 
     if (vec3.length(movement) > 0) {
       vec3.normalize(movement, movement);
-      vec3.scale(movement, movement, speed * (1 / (delta * 10)));
+      vec3.scale(movement, movement, speed * (delta / 1000));
       vec3.add(this.camera.position, this.camera.position, movement);
     }
 
@@ -346,7 +346,16 @@ class Engine {
     // imgui
     ImGuiImplWeb.BeginRender();
 
-    ImGui.Begin("My Window");
+    ImGui.Begin("Controls");
+    ImGui.Text("Use W/A/S/D and Space/Shift to move around the scene!");
+    if (ImGui.Button("Control Camera")) {
+      console.log("changed mouse mode");
+      this.input.mouseFree = false;
+      const canvas = document.getElementById("game");
+      canvas?.requestPointerLock();
+    }
+    ImGui.Text("---------------");
+    ImGui.Text("Debug:");
     ImGui.Text("FPS: " + Math.floor(fps));
     ImGui.Text("Input:" + inputDirection);
     ImGui.Text(
@@ -357,12 +366,8 @@ class Engine {
     );
     ImGui.Text("yaw:" + (this.camera.yaw * (180 / Math.PI)).toFixed(1) + "°");
     ImGui.Text("Mouse free:" + this.input.mouseFree);
-    if (ImGui.Button("Switch camera mode")) {
-      console.log("changed mouse mode");
-      this.input.mouseFree = false;
-      const canvas = document.getElementById("game");
-      canvas?.requestPointerLock();
-    }
+
+    ImGui.CloseCurrentPopup();
     ImGui.End();
 
     this.lastTime = time;
