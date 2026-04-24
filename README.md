@@ -32,5 +32,5 @@ Open `http://localhost:9090` in a browser with WebGL support.
 
 ### Dependencies
 
-https://github.com/toji/gl-matrix
+https://github.com/toji/gl-matrix,
 https://github.com/mori2003/jsimgui
