@@ -1,5 +1,5 @@
 name: GitHub Pages Deployment
-run-name: ${{ github.actor }} is running
+run-name: ${{ github.actor }} has started the deployment.
 on:
   push:
     branches:
@@ -7,23 +7,24 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
- 
+    permissions: write-all
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
- 
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
- 
+
       - name: Install dependencies
         run: npm ci
- 
+
       - name: Build
         run: npm run build
- 
+
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:

@@ -32,7 +32,7 @@ void main() {
   vec3 halfway  = normalize(lightDir + viewDir);
 
   // Ambient
-  float ambientStrength = 0.18;
+  float ambientStrength = 0.12;
   vec3 ambient = ambientStrength * sun.color;
 
   // Diffuse
@@ -46,7 +46,7 @@ void main() {
 
   // Bounce approximation
   vec3 bounceDir    = vec3(-sun.dir.x, -sun.dir.y, -sun.dir.z);
-  float bounceDiff  = max(dot(normal, bounceDir), 0.0) * 0.18; // weak
+  float bounceDiff  = max(dot(normal, bounceDir), 0.0) * 0.12; // weak
   vec3 bounceColor  = vec3(0.8, 0.6, 0.4); // warm ground color
   vec3 bounce       = bounceDiff * bounceColor;
 

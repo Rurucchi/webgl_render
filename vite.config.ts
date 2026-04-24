@@ -13,5 +13,4 @@ export default defineConfig((args) => ({
   define: {
     __DEBUG__: args.mode === "development" ? "true" : "false",
   },
-  base: "/webgl_render/",
 }));
