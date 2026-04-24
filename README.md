@@ -9,11 +9,18 @@ A WebGL renderer built from scratch, GLTF loading, real-time Blinn-Phong lightin
 - Camera system
 - Raw WebGL
 
-## Getting Started
+## Requirements:
+
+- Node.js 25
+- Web browser with WebGL2 support
+- Keyboard and Mouse for controls
+
+## Install
 
 ```bash
 git clone https://github.com/Rurucchi/webgl_render.git
 cd webgl_render
+npm i
 npm run dev
 ```
 
