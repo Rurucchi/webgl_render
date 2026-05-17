@@ -3,12 +3,12 @@ precision mediump float;
 
 in vec3 i_pos;
 in vec3 i_normal;
-in vec3 i_tangent;
+in vec4 i_tangent;
 in vec2 i_tex;
 
 out vec2 o_tex;
 out vec3 o_normal;
-out vec3 o_tangent;
+out vec4 o_tangent;
 out vec3 o_worldPos; 
 
 layout(std140) uniform Camera {

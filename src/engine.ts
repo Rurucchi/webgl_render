@@ -2,25 +2,27 @@ import { vec3 } from "gl-matrix";
 import { ImGui, ImGuiImplWeb, ImVec2 } from "@mori2003/jsimgui";
 
 // shaders
-import vs from "./shaders/vertexShader";
-import fs from "./shaders/fragmentShader";
+import vs from "./render/shaders/vertexShader";
+import fs from "./render/shaders/fragmentShader";
 
 // rendering
-import { type Mesh, createMeshBuffers } from "./scene/mesh";
+import { type Mesh } from "./render/mesh";
 
 // camera
-import Camera from "./camera";
-import Input from "./input";
+import Camera from "./engine/camera";
+import Input from "./engine/input";
 
 // GLTF
 import GLTFModel from "./scene/GLTFModel";
-import { type Texture, initTexture } from "./scene/texture";
+import { type Texture } from "./render/texture";
 import {
   getSunBufferSize,
   getSunFloatCount,
   // type Light,
   type Sun,
 } from "./scene/light";
+import type { Material } from "./render/material";
+import type { Sampler } from "./render/sampler";
 
 /* Constants */
 
@@ -44,7 +46,8 @@ class Engine {
   lastTime: number = 0.0;
   meshBuffer: Array<Mesh>;
   texBuffer: Array<Texture>;
-  // lightBuffer: Array<Light>;
+  matBuffer: Array<Material>;
+  samplerBuffer: Array<Sampler>;
   sun: Sun;
   camera: Camera;
   input: Input;
@@ -87,6 +90,8 @@ class Engine {
 
     const program = this.bindShaders(vertexShader, fragShader);
 
+    gl.useProgram(program);
+
     // Setup Camera UBO
     const cameraBuffer = gl.createBuffer();
     gl.bindBuffer(gl.UNIFORM_BUFFER, cameraBuffer);
@@ -107,28 +112,16 @@ class Engine {
     gl.uniformBlockBinding(program, lightBlockIndex, lightBindingPoint);
     gl.bindBufferBase(gl.UNIFORM_BUFFER, lightBindingPoint, lightBuffer);
 
-    // VS Attributes
-    const posLocation = gl.getAttribLocation(program, "i_pos");
-    const normalLocation = gl.getAttribLocation(program, "i_normal");
-    const tangentLocation = gl.getAttribLocation(program, "i_tangent");
-    const texLocation = gl.getAttribLocation(program, "i_tex");
-
-    // FS Attributes
-    const uSamplerLoc = gl.getUniformLocation(program, "uSampler");
-
-    const stride = 12 * 4;
-
-    gl.enableVertexAttribArray(posLocation);
-    gl.vertexAttribPointer(posLocation, 3, gl.FLOAT, false, stride, 0);
-    gl.enableVertexAttribArray(normalLocation);
-    gl.vertexAttribPointer(normalLocation, 3, gl.FLOAT, false, stride, 3 * 4); //12
-    gl.enableVertexAttribArray(tangentLocation);
-    gl.vertexAttribPointer(tangentLocation, 3, gl.FLOAT, false, stride, 6 * 4); //24
-    gl.enableVertexAttribArray(texLocation);
-    gl.vertexAttribPointer(texLocation, 2, gl.FLOAT, false, stride, 9 * 4); //36
-
-    // Textures slots
-    gl.uniform1i(uSamplerLoc, 0); // 0 = TEXTURE0
+    // Samplers & texture slots
+    const texSamplerLoc = gl.getUniformLocation(program, "uTex");
+    gl.uniform1i(texSamplerLoc, 0); // 0 = TEXTURE0
+    const normalSamplerLoc = gl.getUniformLocation(program, "uNormal");
+    gl.uniform1i(normalSamplerLoc, 1); // 1 = TEXTURE1
+    const metallicSamplerSamplerLoc = gl.getUniformLocation(
+      program,
+      "uMetallicRoughness",
+    );
+    gl.uniform1i(metallicSamplerSamplerLoc, 2); // 2 = TEXTURE2
 
     // Depth testing
     gl.enable(gl.DEPTH_TEST);
@@ -150,7 +143,8 @@ class Engine {
 
     this.meshBuffer = new Array<Mesh>();
     this.texBuffer = new Array<Texture>();
-    // this.lightBuffer = new Array<Light>();
+    this.matBuffer = new Array<Material>();
+    this.samplerBuffer = new Array<Sampler>();
   }
 
   compileVS() {
@@ -234,28 +228,66 @@ class Engine {
 
     // loading GLTF
     const processedGLTF = await this.gltfModel.loadAssets(
+      // For supporting URL paths
       `${import.meta.env.BASE_URL}assets/Sponza.gltf`,
     );
 
     // TODO: Thread this, too heavy on startup
     if (processedGLTF) {
-      // Textures
-      await this.gltfModel.processTextures(processedGLTF, this.texBuffer);
-
       // Meshes
-      this.gltfModel.processNodes(processedGLTF, this.meshBuffer);
-      this.meshBuffer.forEach((mesh) => {
-        createMeshBuffers(this.gl, this.program, mesh);
-      });
-      this.texBuffer.forEach((tex) => {
-        initTexture(this.gl, tex);
-      });
-    }
+      this.gltfModel.processNodes(
+        this.gl,
+        processedGLTF,
 
-    // this.lightBuffer.push();
+        this.program,
+        this.meshBuffer,
+      );
+
+      // Textures
+      await this.gltfModel.processTextures(
+        this.gl,
+        processedGLTF,
+        this.texBuffer,
+      );
+
+      // Sampler
+      this.gltfModel.processSampler(this.gl, processedGLTF, this.samplerBuffer);
+
+      // Materials
+      await this.gltfModel.processMaterials(processedGLTF, this.matBuffer);
+    }
 
     // using update as a callback for rendering loop (vsync is forced)
     requestAnimationFrame(this._update);
+  }
+
+  queryTexture(texId: string | undefined) {
+    if (texId) {
+      const tex = this.texBuffer.find((tex) => tex.id === texId);
+      return tex;
+    } else {
+      return undefined;
+    }
+  }
+
+  querySampler(samplerId: string | undefined) {
+    if (samplerId) {
+      const sampler = this.samplerBuffer.find(
+        (sampler) => sampler.id === samplerId,
+      );
+      return sampler;
+    } else {
+      return undefined;
+    }
+  }
+
+  queryMaterial(matId: string | undefined) {
+    if (matId) {
+      const mat = this.matBuffer.find((material) => material.id === matId);
+      return mat;
+    } else {
+      return undefined;
+    }
   }
 
   drawMesh(gl: WebGL2RenderingContext, mesh: Mesh) {
@@ -264,14 +296,69 @@ class Engine {
     gl.bindBuffer(gl.ARRAY_BUFFER, mesh.vbo);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ibo);
 
-    // Textures.
-    const tex = this.texBuffer.find((tex) => tex.id === mesh.texId);
-    if (tex) {
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, tex.webGLTexture);
+    // Material
+    const mat = this.queryMaterial(mesh.matId);
+
+    // This should be changed
+    if (mat) {
+      const baseColorTexture: Texture | undefined = this.queryTexture(
+        mat.baseColorTextureId,
+      );
+
+      const normalTexture: Texture | undefined = this.queryTexture(
+        mat.normalTextureId,
+      );
+      const metallicRoughnessTexture: Texture | undefined = this.queryTexture(
+        mat.metallicRoughnessTextureId,
+      );
+
+      // Bind textures
+      if (mat.baseColorTextureId && baseColorTexture) {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, baseColorTexture.webGLTexture);
+
+        // Bind sampler
+        const sampler = this.querySampler(baseColorTexture.samplerId);
+        if (sampler) {
+          gl.bindSampler(0, sampler.glSampler);
+        }
+      }
+
+      if (mat.normalTextureId && normalTexture) {
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, normalTexture.webGLTexture);
+        // Bind sampler
+        const sampler = this.querySampler(normalTexture.samplerId);
+        if (sampler) {
+          gl.bindSampler(1, sampler.glSampler);
+        }
+      }
+
+      if (mat.metallicRoughnessTextureId && metallicRoughnessTexture) {
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D, metallicRoughnessTexture.webGLTexture);
+        // Bind sampler
+        const sampler = this.querySampler(metallicRoughnessTexture.samplerId);
+        if (sampler) {
+          gl.bindSampler(2, sampler.glSampler);
+        }
+      }
+
+      if (mat?.doubleSided) {
+        gl.disable(gl.CULL_FACE);
+        gl.cullFace(gl.FRONT_AND_BACK);
+      } else {
+        gl.enable(gl.CULL_FACE);
+        gl.cullFace(gl.BACK);
+      }
     }
 
     gl.drawElements(gl.TRIANGLES, mesh.indexCount, gl.UNSIGNED_SHORT, 0);
+
+    // Remove samplers for Imgui & UI rendering
+    gl.bindSampler(0, null);
+    gl.bindSampler(1, null);
+    gl.bindSampler(2, null);
   }
 
   _update(time: number) {

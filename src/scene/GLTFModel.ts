@@ -2,8 +2,15 @@
 import { load } from "@loaders.gl/core";
 import { GLTFLoader, postProcessGLTF } from "@loaders.gl/gltf";
 import type { GLTFPostprocessed, GLTFWithBuffers } from "@loaders.gl/gltf";
-import type { Mesh } from "./mesh";
-import type { Texture } from "./texture";
+import {
+  createMesh,
+  interleaveVertices,
+  createMeshGLBuffers,
+  type Mesh,
+} from "../render/mesh";
+import { createTexture, type Texture } from "../render/texture";
+import { createMaterial, type Material } from "../render/material";
+import { createSampler, type Sampler } from "../render/sampler";
 
 export default class GLTFModel {
   async loadAssets(url: string) {
@@ -26,7 +33,12 @@ export default class GLTFModel {
     }
   }
 
-  processNodes(processedGLTF: GLTFPostprocessed, meshBuffer: Array<Mesh>) {
+  processNodes(
+    gl: WebGL2RenderingContext,
+    processedGLTF: GLTFPostprocessed,
+    glProgram: WebGLProgram,
+    meshBuffer: Array<Mesh>,
+  ) {
     // console.log(processedGLTF);
     for (const node of processedGLTF.nodes) {
       // check node is empty
@@ -37,15 +49,21 @@ export default class GLTFModel {
       if (node.mesh?.primitives) {
         for (const primitive of node.mesh?.primitives) {
           if (node.mesh) {
-            this.processMesh(primitive, meshBuffer);
+            this.processMesh(gl, primitive, glProgram, meshBuffer);
           }
         }
       }
     }
   }
 
-  processMesh(primitiveGLTF: any, meshBuffer: Array<Mesh>) {
-    console.log(primitiveGLTF);
+  processMesh(
+    gl: WebGL2RenderingContext,
+    primitiveGLTF: any,
+    glProgram: WebGLProgram,
+    meshBuffer: Array<Mesh>,
+  ) {
+    const floatsPerVertex = 12;
+
     if (primitiveGLTF.attributes.TANGENT) {
       // Assuming the vertex data has the same number of component per vertex.
       const position = primitiveGLTF.attributes.POSITION;
@@ -54,94 +72,129 @@ export default class GLTFModel {
       const texPos = primitiveGLTF.attributes.TEXCOORD_0;
       const pbrMetallicRoughness = primitiveGLTF.material.pbrMetallicRoughness;
 
+      const indexData = primitiveGLTF.indices.value;
+      const indexCount = primitiveGLTF.indices.count;
+      const matId = primitiveGLTF.material.id;
+      const texId = pbrMetallicRoughness.baseColorTexture.texture.id;
+      const texIndex = pbrMetallicRoughness.baseColorTexture.texture.index;
+
       const count = position.count;
       if (
         normal.count === count &&
         texPos.count === count &&
         tangent.count === count
       ) {
-        // vertexBuffer size = vertices count * attributes count.
+        const mesh = createMesh(
+          count,
+          floatsPerVertex,
+          indexData,
+          indexCount,
+          matId,
+          texId,
+          texIndex,
+        );
 
-        const floatsPerVertex = 12;
-        const newMesh: Mesh = {
-          vertexData: new Float32Array(count * floatsPerVertex),
-          indexData: primitiveGLTF.indices.value,
-          indexCount: primitiveGLTF.indices.count,
-          texId: pbrMetallicRoughness.baseColorTexture.texture.id,
-          texIndex: pbrMetallicRoughness.baseColorTexture.texture.index,
-          vao: null,
-          vbo: null,
-          ibo: null,
-        };
+        interleaveVertices(
+          mesh,
+          count,
+          floatsPerVertex,
+          position,
+          normal,
+          tangent,
+          texPos,
+        );
 
-        // Interleave vertices.
-        for (let i = 0; i < count; i++) {
-          const base = i * floatsPerVertex;
+        createMeshGLBuffers(gl, glProgram, mesh);
 
-          // POSITION (vec3)
-          newMesh.vertexData[base + 0] = position.value[i * 3 + 0];
-          newMesh.vertexData[base + 1] = position.value[i * 3 + 1];
-          newMesh.vertexData[base + 2] = position.value[i * 3 + 2];
-
-          // NORMAL (vec3)
-          newMesh.vertexData[base + 3] = normal.value[i * 3 + 0];
-          newMesh.vertexData[base + 4] = normal.value[i * 3 + 1];
-          newMesh.vertexData[base + 5] = normal.value[i * 3 + 2];
-
-          // TANGENT (vec4)
-          newMesh.vertexData[base + 6] = tangent.value[i * 4 + 0];
-          newMesh.vertexData[base + 7] = tangent.value[i * 4 + 1];
-          newMesh.vertexData[base + 8] = tangent.value[i * 4 + 2];
-          newMesh.vertexData[base + 9] = tangent.value[i * 4 + 3];
-
-          // TEXCOORD (vec2)
-          newMesh.vertexData[base + 10] = texPos.value[i * 2 + 0];
-          newMesh.vertexData[base + 11] = texPos.value[i * 2 + 1];
-        }
-
-        // Checking mask as transparency materials should be drawn after opaque ones
+        // Checking mask to determine draw order.
         if (
           primitiveGLTF.material.alphaMode === "MASK" ||
           primitiveGLTF.material.alphaMode === "BLEND"
         ) {
-          meshBuffer.push(newMesh);
+          meshBuffer.push(mesh);
         } else {
-          meshBuffer.unshift(newMesh);
+          meshBuffer.unshift(mesh);
         }
       }
     }
   }
 
+  // This function is async because it involves async browser API calls.
   async processTextures(
+    gl: WebGL2RenderingContext,
     processedGLTF: GLTFPostprocessed,
     texBuffer: Array<Texture>,
   ) {
-    for (const tex of processedGLTF.textures) {
+    // Promises to try parallelizing decoding on Chromium based browsers. Firefox forces singlethread (even with workers).
+    const texturePromises = processedGLTF.textures.map(async (tex) => {
       // Check that texture object is not empty.
       if (
         tex.id &&
         tex.source?.image.width &&
         tex.source?.image.height &&
-        tex.source?.image &&
         tex.source?.mimeType &&
-        tex.source?.bufferView?.data
+        tex.source?.bufferView?.data &&
+        tex.sampler
       ) {
-        // This should not be made like this; but GLTFPostprocessed forces such workaround.
-        const blob = new Blob([tex.source?.bufferView.data.slice(0)], {
-          type: "image/jpeg",
-        });
-        const imageBitmap = await createImageBitmap(blob);
+        const id = tex.id;
+        const width = tex.source?.image.width;
+        const height = tex.source?.image.height;
+        const mimeType = tex.source?.mimeType;
+        const data = tex.source?.bufferView?.data;
+        const samplerId = tex.sampler?.id;
 
-        const texture: Texture = {
-          id: tex.id,
-          width: tex.source?.image.width,
-          height: tex.source?.image.height,
-          image: imageBitmap,
-          webGLTexture: null,
-        };
+        const texture = await createTexture(
+          gl,
+          id,
+          width,
+          height,
+          mimeType,
+          data,
+          samplerId,
+        );
 
         texBuffer.push(texture);
       }
+    });
+    await Promise.all(texturePromises);
+  }
+
+  processMaterials(
+    processedGLTF: GLTFPostprocessed,
+    matBuffer: Array<Material>,
+  ) {
+    for (const mat of processedGLTF.materials) {
+      const material: Material = createMaterial(mat);
+      matBuffer.push(material);
     }
+  }
+
+  // This is unnecessary as there is only one sampler in the GLTF data.
+  // This was added for sanity purposes.
+  processSampler(
+    gl: WebGL2RenderingContext,
+    processedGLTF: GLTFPostprocessed,
+    samplerBuffer: Array<Sampler>,
+  ) {
+    processedGLTF.samplers.forEach((texSampler) => {
+      const id: string = texSampler.id;
+      const magFilter: number | undefined = texSampler.magFilter;
+      const minFilter: number | undefined = texSampler.minFilter;
+      const parameters: any = texSampler.parameters;
+      const wrapS: number | undefined = texSampler.wrapS;
+      const wrapT: number | undefined = texSampler.wrapT;
+
+      const sampler = createSampler(
+        gl,
+        id,
+        magFilter,
+        minFilter,
+        parameters,
+        wrapS,
+        wrapT,
+      );
+
+      samplerBuffer.push(sampler);
+    });
   }
 }
