@@ -1,11 +1,11 @@
 # WebGL Sponza Renderer
 
-A WebGL renderer built from scratch, GLTF loading, real-time Blinn-Phong lighting and a first-person camera system.
+A WebGL renderer built from scratch, GLTF loading, real-time lighting and a first-person camera system.
 
 ## Features
 
 - GLTF scene loading
-- Blinn-Phong lighting model
+- - Cook Torrance GGX lighting model | Blinn-Phong lighting model (has to be switched in the fragment shader)
 - Camera system
 - Raw WebGL
 
@@ -37,3 +37,9 @@ Open `http://localhost:9090` in a browser with WebGL support.
 
 https://github.com/toji/gl-matrix,
 https://github.com/mori2003/jsimgui
+
+### Credits
+
+https://learnopengl.com for shader code.
+https://github.com/gnikoloff/webgpu-sponza-demo for Sponza assets used.
+@Xrhoys for some sample code used.
