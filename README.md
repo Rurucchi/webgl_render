@@ -5,7 +5,7 @@ A WebGL renderer built from scratch, GLTF loading, real-time lighting and a firs
 ## Features
 
 - GLTF scene loading
-- - Cook Torrance GGX lighting model | Blinn-Phong lighting model (has to be switched in the fragment shader)
+- Cook Torrance GGX lighting model | Blinn-Phong lighting model (has to be switched in the fragment shader)
 - Camera system
 - Raw WebGL
 

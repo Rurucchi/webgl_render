@@ -10,6 +10,21 @@ export type Mesh = {
   ibo: WebGLBuffer | null;
 };
 
+export type MeshBuffer = {
+  opaque: Array<Mesh>;
+  mask: Array<Mesh>;
+  blend: Array<Mesh>;
+};
+
+export function initMeshBuffer() {
+  const meshBuffer: MeshBuffer = {
+    opaque: new Array<Mesh>(),
+    mask: new Array<Mesh>(),
+    blend: new Array<Mesh>(),
+  };
+  return meshBuffer;
+}
+
 export function createMesh(
   vertexCount: number,
   floatsPerVertex: number,
@@ -46,15 +61,16 @@ export function interleaveVertices(
   normal: any,
   tangent: any,
   texPos: any,
+  scale: number,
 ) {
   // Interleave vertices.
   for (let i = 0; i < vertexCount; i++) {
     const base = i * floatsPerVertex;
 
     // POSITION (vec3)
-    mesh.vertexData[base + 0] = position.value[i * 3 + 0];
-    mesh.vertexData[base + 1] = position.value[i * 3 + 1];
-    mesh.vertexData[base + 2] = position.value[i * 3 + 2];
+    mesh.vertexData[base + 0] = scaleFloat(position.value[i * 3 + 0], scale);
+    mesh.vertexData[base + 1] = scaleFloat(position.value[i * 3 + 1], scale);
+    mesh.vertexData[base + 2] = scaleFloat(position.value[i * 3 + 2], scale);
 
     // NORMAL (vec3)
     mesh.vertexData[base + 3] = normal.value[i * 3 + 0];
@@ -73,11 +89,7 @@ export function interleaveVertices(
   }
 }
 
-export function createMeshGLBuffers(
-  gl: WebGL2RenderingContext,
-  program: WebGLProgram,
-  mesh: Mesh,
-) {
+export function createMeshGLBuffers(gl: WebGL2RenderingContext, mesh: Mesh) {
   // Setup VAO.
   mesh.vao = gl.createVertexArray();
   gl.bindVertexArray(mesh.vao);
@@ -92,33 +104,49 @@ export function createMeshGLBuffers(
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ibo);
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indexData, gl.STATIC_DRAW);
 
-  // Attributes.
-  const posLocation = gl.getAttribLocation(program, "i_pos");
-  const normalLocation = gl.getAttribLocation(program, "i_normal");
-  const tangentLocation = gl.getAttribLocation(program, "i_tangent");
-  const texLocation = gl.getAttribLocation(program, "i_tex");
-
-  // const colorLocation = gl.getAttribLocation(program, "i_color");
   const stride = 12 * 4;
 
-  // Check for shader attributes.
-  if (posLocation !== -1) {
-    // Map the attributes.
-    gl.enableVertexAttribArray(posLocation);
-    gl.vertexAttribPointer(posLocation, 3, gl.FLOAT, false, stride, 0);
-  }
-  if (normalLocation !== -1) {
-    gl.enableVertexAttribArray(normalLocation);
-    gl.vertexAttribPointer(normalLocation, 3, gl.FLOAT, false, stride, 3 * 4);
-  }
-  if (tangentLocation !== -1) {
-    gl.enableVertexAttribArray(tangentLocation);
-    gl.vertexAttribPointer(tangentLocation, 4, gl.FLOAT, false, stride, 6 * 4);
-  }
-  if (texLocation !== -1) {
-    gl.enableVertexAttribArray(texLocation);
-    gl.vertexAttribPointer(texLocation, 2, gl.FLOAT, false, stride, 10 * 4);
-  }
+  // Attributes. This has been replaced in favor of permanently assigned attributes locations.
+  // const posLocation = gl.getAttribLocation(program, "i_pos");
+  // const normalLocation = gl.getAttribLocation(program, "i_normal");
+  // const tangentLocation = gl.getAttribLocation(program, "i_tangent");
+  // const texLocation = gl.getAttribLocation(program, "i_tex");
+
+  // // Check for shader attributes.
+  // if (posLocation !== -1) {
+  //   // Map the attributes.
+  //   gl.enableVertexAttribArray(posLocation);
+  //   gl.vertexAttribPointer(posLocation, 3, gl.FLOAT, false, stride, 0);
+  // }
+  // if (normalLocation !== -1) {
+  //   gl.enableVertexAttribArray(normalLocation);
+  //   gl.vertexAttribPointer(normalLocation, 3, gl.FLOAT, false, stride, 3 * 4);
+  // }
+  // if (tangentLocation !== -1) {
+  //   gl.enableVertexAttribArray(tangentLocation);
+  //   gl.vertexAttribPointer(tangentLocation, 4, gl.FLOAT, false, stride, 6 * 4);
+  // }
+  // if (texLocation !== -1) {
+  //   gl.enableVertexAttribArray(texLocation);
+  //   gl.vertexAttribPointer(texLocation, 2, gl.FLOAT, false, stride, 10 * 4);
+  // }
+
+  // Map the attributes.
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 3, gl.FLOAT, false, stride, 0);
+
+  gl.enableVertexAttribArray(1);
+  gl.vertexAttribPointer(1, 3, gl.FLOAT, false, stride, 3 * 4);
+
+  gl.enableVertexAttribArray(2);
+  gl.vertexAttribPointer(2, 4, gl.FLOAT, false, stride, 6 * 4);
+
+  gl.enableVertexAttribArray(3);
+  gl.vertexAttribPointer(3, 2, gl.FLOAT, false, stride, 10 * 4);
 
   gl.bindVertexArray(null);
+}
+
+function scaleFloat(scale: number, float: number) {
+  return float * scale;
 }

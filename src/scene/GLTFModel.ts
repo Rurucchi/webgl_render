@@ -6,13 +6,13 @@ import {
   createMesh,
   interleaveVertices,
   createMeshGLBuffers,
-  type Mesh,
-} from "../render/mesh";
-import { createTexture, type Texture } from "../render/texture";
-import { createMaterial, type Material } from "../render/material";
-import { createSampler, type Sampler } from "../render/sampler";
+} from "../assets/mesh";
+import { createTexture, type Texture } from "../assets/texture";
+import { createMaterial, type Material } from "../assets/material";
+import { createSampler, type Sampler } from "../assets/sampler";
+import { type Assets } from "../assets/assets";
 
-export default class GLTFModel {
+export const GLTFModel = {
   async loadAssets(url: string) {
     // Load and parse a file
     try {
@@ -31,36 +31,41 @@ export default class GLTFModel {
     } catch (err) {
       console.error(err);
     }
-  }
+  },
 
   processNodes(
     gl: WebGL2RenderingContext,
     processedGLTF: GLTFPostprocessed,
-    glProgram: WebGLProgram,
-    meshBuffer: Array<Mesh>,
+    assets: Assets,
   ) {
     // console.log(processedGLTF);
     for (const node of processedGLTF.nodes) {
       // check node is empty
       const meshInfo = node.mesh;
+
+      let scale;
+      if (node.scale) {
+        scale = node.scale[0];
+      }
+
       if (!meshInfo) {
         continue;
       }
-      if (node.mesh?.primitives) {
+      if (node.mesh?.primitives && scale) {
         for (const primitive of node.mesh?.primitives) {
           if (node.mesh) {
-            this.processMesh(gl, primitive, glProgram, meshBuffer);
+            this.processMesh(gl, primitive, assets, scale);
           }
         }
       }
     }
-  }
+  },
 
   processMesh(
     gl: WebGL2RenderingContext,
     primitiveGLTF: any,
-    glProgram: WebGLProgram,
-    meshBuffer: Array<Mesh>,
+    assets: Assets,
+    scale: number,
   ) {
     const floatsPerVertex = 12;
 
@@ -102,28 +107,28 @@ export default class GLTFModel {
           normal,
           tangent,
           texPos,
+          scale,
         );
 
-        createMeshGLBuffers(gl, glProgram, mesh);
+        createMeshGLBuffers(gl, mesh);
 
         // Checking mask to determine draw order.
-        if (
-          primitiveGLTF.material.alphaMode === "MASK" ||
-          primitiveGLTF.material.alphaMode === "BLEND"
-        ) {
-          meshBuffer.push(mesh);
+        if (primitiveGLTF.material.alphaMode === "MASK") {
+          assets.meshBuffer.mask.push(mesh);
+        } else if (primitiveGLTF.material.alphaMode === "BLEND") {
+          assets.meshBuffer.blend.push(mesh);
         } else {
-          meshBuffer.unshift(mesh);
+          assets.meshBuffer.opaque.push(mesh);
         }
       }
     }
-  }
+  },
 
   // This function is async because it involves async browser API calls.
   async processTextures(
     gl: WebGL2RenderingContext,
     processedGLTF: GLTFPostprocessed,
-    texBuffer: Array<Texture>,
+    assets: Assets,
   ) {
     // Promises to try parallelizing decoding on Chromium based browsers. Firefox forces singlethread (even with workers).
     const texturePromises = processedGLTF.textures.map(async (tex) => {
@@ -153,28 +158,25 @@ export default class GLTFModel {
           samplerId,
         );
 
-        texBuffer.push(texture);
+        assets.texBuffer.push(texture);
       }
     });
     await Promise.all(texturePromises);
-  }
+  },
 
-  processMaterials(
-    processedGLTF: GLTFPostprocessed,
-    matBuffer: Array<Material>,
-  ) {
+  processMaterials(processedGLTF: GLTFPostprocessed, assets: Assets) {
     for (const mat of processedGLTF.materials) {
       const material: Material = createMaterial(mat);
-      matBuffer.push(material);
+      assets.matBuffer.push(material);
     }
-  }
+  },
 
   // This is unnecessary as there is only one sampler in the GLTF data.
   // This was added for sanity purposes.
   processSampler(
     gl: WebGL2RenderingContext,
     processedGLTF: GLTFPostprocessed,
-    samplerBuffer: Array<Sampler>,
+    assets: Assets,
   ) {
     processedGLTF.samplers.forEach((texSampler) => {
       const id: string = texSampler.id;
@@ -194,7 +196,7 @@ export default class GLTFModel {
         wrapT,
       );
 
-      samplerBuffer.push(sampler);
+      assets.samplerBuffer.push(sampler);
     });
-  }
-}
+  },
+};

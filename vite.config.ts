@@ -13,4 +13,7 @@ export default defineConfig((args) => ({
   define: {
     __DEBUG__: args.mode === "development" ? "true" : "false",
   },
+  optimizeDeps: {
+    exclude: ["@mori2003/jsimgui", "@mori2003/jsimgui_impl_web"],
+  },
 }));

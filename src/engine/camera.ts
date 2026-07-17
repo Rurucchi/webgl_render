@@ -1,8 +1,8 @@
 import { vec3, mat4 } from "gl-matrix";
 
 const worldUp: vec3 = vec3.fromValues(0, 1, 0);
-const near = 0.2;
-const far = 10000.0;
+const near = 0.1;
+const far = 30;
 
 export default class Camera {
   public freeMouse: boolean = true;
@@ -16,14 +16,18 @@ export default class Camera {
   public projectionMatrix: mat4 = mat4.create();
   public inverseProjectionMatrix: mat4 = mat4.create();
   public bufferSize: number;
+  public mode: "orthographic" | "perspective";
+  public orthoSize: number = 0;
 
   constructor(
     viewportWidth: number,
     viewportHeight: number,
     position: vec3,
-    yaw: number,
     pitch: number,
+    yaw: number,
     fov: number,
+    mode: string,
+    orthosize?: number,
   ) {
     this.viewportWidth = viewportWidth;
     this.viewportHeight = viewportHeight;
@@ -32,6 +36,17 @@ export default class Camera {
     this.pitch = pitch;
     this.fov = fov;
     this.bufferSize = this.getBufferSize();
+
+    // default camera mode is perspective.
+    if (mode === "orthographic") {
+      this.mode = mode;
+    } else {
+      this.mode = "perspective";
+    }
+
+    if (orthosize) {
+      this.orthoSize = orthosize;
+    }
   }
 
   // Buffer size for ubo
@@ -103,24 +118,44 @@ export default class Camera {
     const target = vec3.create();
     vec3.add(target, this.position, this.getForward());
 
-    // const target = vec3.fromValues(0, 0, 0);
-
     mat4.lookAt(viewMatrix, this.position, target, worldUp);
 
     this.viewMatrix = viewMatrix;
   }
 
-  updatePerspectiveMatrix() {
+  updateProjectionMatrix() {
     const projection = mat4.create();
 
-    mat4.perspectiveNO(
-      projection,
-      this.fov, // vertical field of view
-      this.viewportWidth / this.viewportHeight, // width / height
-      near, // > 0
-      far,
-    );
+    const aspect = this.viewportWidth / this.viewportHeight;
+
+    if (this.mode === "orthographic") {
+      const top = this.orthoSize;
+      const bottom = -this.orthoSize;
+
+      const right = this.orthoSize * aspect;
+      const left = -right;
+
+      mat4.orthoNO(projection, left, right, bottom, top, near, far);
+    } else {
+      mat4.perspectiveNO(
+        projection,
+        this.fov, // vertical field of view
+        aspect, // width / height
+        near, // > 0
+        far,
+      );
+    }
 
     this.projectionMatrix = projection;
+  }
+
+  lookAt(target: vec3) {
+    const direction = vec3.create();
+    vec3.subtract(direction, target, this.position);
+    vec3.normalize(direction, direction);
+    this.pitch = Math.asin(direction[1]);
+    this.yaw = Math.atan2(direction[0], -direction[2]);
+
+    this.updateViewMatrix();
   }
 }

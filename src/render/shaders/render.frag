@@ -1,20 +1,18 @@
-const fs: string = `#version 300 es
-precision mediump float;
+#version 300 es
+precision highp float;
 
 #define PI 3.14159265
+#define alphaCutoff 0.5 // This should not be hardcoded.
 
+// vertex shader input
 in vec2 o_tex;
 in vec3 o_normal;
 in vec4 o_tangent;
 in vec3 o_worldPos;
 
-struct Sun {
-  vec3 dir;
-  vec3 color;
-};
-
-layout(std140) uniform Light {
-  Sun sun;
+layout(std140) uniform uSun {
+  vec3 sunDir;
+  vec3 sunColor;
 };
 
 layout(std140) uniform Camera {
@@ -23,9 +21,13 @@ layout(std140) uniform Camera {
   vec3 cameraPos;
 };
 
+// textures
 uniform sampler2D uTex;
 uniform sampler2D uNormal;
 uniform sampler2D uMetallicRoughness;
+
+// alpha mode
+uniform bool uUseAlphaMask;      // true = BLEND, false = OPAQUE or MASK
 
 out vec4 frag_color;
 
@@ -149,19 +151,19 @@ vec3 BRDF_GGX(
 vec3 blinnPhong(vec3 normal, vec3 lightDir, vec3 viewDir, vec3 halfway, vec4 texColor) {
   // Ambient
   float ambientStrength = 0.1;
-  vec3 ambient = ambientStrength * sun.color;
+  vec3 ambient = ambientStrength * sunColor;
 
   // Diffuse
   float diff = max(dot(normal, lightDir), 0.0);
-  vec3 diffuse = diff * sun.color;
+  vec3 diffuse = diff * sunColor;
 
   // Specular
   float shininess = 4.0;
   float spec = pow(max(dot(normal, halfway), 0.0), shininess);
-  vec3 specular = 0.2 * spec * sun.color;  // 0.2 = specular strength
+  vec3 specular = 0.2 * spec * sunColor;  // 0.2 = specular strength
 
   // Bounce approximation
-  vec3 bounceDir    = vec3(-sun.dir.x, -sun.dir.y, -sun.dir.z);
+  vec3 bounceDir    = vec3(-sunDir.x, -sunDir.y, -sunDir.z);
   float bounceDiff  = max(dot(normal, bounceDir), 0.0) * 0.1; // weak
   vec3 bounceColor  = vec3(0.8, 0.6, 0.4); // warm ground color
   vec3 bounce       = bounceDiff * bounceColor;
@@ -190,12 +192,12 @@ vec3 ambientLight(vec3 N, vec3 albedo, float metallic) {
 // ----------------------------------------------------------------------------
 // TODO: unify models props.
 void main() { 
-vec3 F0 = vec3(0.04);
 
+  vec3 F0 = vec3(0.04);
 
   // Use for blinn-phong
   vec3 normal   = normalize(o_normal);
-  vec3 lightDir = normalize(sun.dir);
+  vec3 lightDir = normalize(sunDir);
   vec3 viewDir  = normalize(cameraPos - o_worldPos);
   vec3 halfway  = normalize(lightDir + viewDir);
   vec4 texColor = texture(uTex, o_tex);
@@ -204,13 +206,18 @@ vec3 F0 = vec3(0.04);
   float roughness = metallicRoughness.g;
   float metallic  = metallicRoughness.b;
 
+  if (uUseAlphaMask && texColor.a < alphaCutoff) {
+    discard;
+    return;
+  }
+
   // Material decoding for PBR.
   vec3 albedo = pow(texture(uTex, o_tex).rgb, vec3(2.2));
   vec4 mr = texture(uMetallicRoughness, o_tex);
   roughness = max(roughness, 0.04); // Safety to avoid extreme brightness.
   vec3 N = getNormalFromMap();
   vec3 V = normalize(cameraPos - o_worldPos);
-  vec3 radiance = sun.color;
+  vec3 radiance = sunColor;
 
   vec3 lighting = BRDF_GGX(
       albedo,
@@ -238,8 +245,8 @@ vec3 F0 = vec3(0.04);
   color = pow(color, vec3(1.0 / 2.2));
 
   frag_color = vec4(color, texColor.a);
+
+// frag_color = vec4(texture(uNormal, o_tex));
+// frag_color = vec4(texture(uMetallicRoughness, o_tex));
   return;
 }
-`;
-
-export default fs;

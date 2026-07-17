@@ -1,10 +1,10 @@
-const vs: string = `#version 300 es
-precision mediump float;
+#version 300 es
+precision highp float;
 
-in vec3 i_pos;
-in vec3 i_normal;
-in vec4 i_tangent;
-in vec2 i_tex;
+layout(location = 0) in vec3 i_pos;
+layout(location = 1) in vec3 i_normal;
+layout(location = 2) in vec4 i_tangent;
+layout(location = 3) in vec2 i_tex;
 
 out vec2 o_tex;
 out vec3 o_normal;
@@ -23,6 +23,3 @@ void main() {
   o_normal = i_normal;
   o_worldPos = i_pos;
 }
-`;
-
-export default vs;
