@@ -9,6 +9,7 @@ in vec2 o_tex;
 in vec3 o_normal;
 in vec4 o_tangent;
 in vec3 o_worldPos;
+in vec4 o_fragPosLightSpace;
 
 layout(std140) uniform uSun {
   vec3 sunDir;
@@ -16,15 +17,19 @@ layout(std140) uniform uSun {
 };
 
 layout(std140) uniform Camera {
-  mat4 view;
-  mat4 projection;
-  vec3 cameraPos;
+  mat4 playerView;
+  mat4 playerProjection;
+  vec3 playerCameraPos;
+  mat4 shadowView;
+  mat4 shadowProjection;
+  vec3 shadowCameraPos;
 };
 
 // textures
 uniform sampler2D uTex;
 uniform sampler2D uNormal;
 uniform sampler2D uMetallicRoughness;
+uniform sampler2D uShadowMap;
 
 // alpha mode
 uniform bool uUseAlphaMask;      // true = BLEND, false = OPAQUE or MASK
@@ -188,6 +193,32 @@ vec3 ambientLight(vec3 N, vec3 albedo, float metallic) {
   return ambient;
 }
 
+// ----------------------------------------------------------------------------
+float ShadowCalculation(vec4 fragPosLightSpace)
+{
+    // Perspective divide (works for orthographic too, since w == 1)
+    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+
+    // Convert from NDC [-1,1] to texture coordinates [0,1]
+    projCoords = projCoords * 0.5 + 0.5;
+
+    // Outside the shadow map?
+    if (projCoords.x < 0.0 || projCoords.x > 1.0 ||
+        projCoords.y < 0.0 || projCoords.y > 1.0 ||
+        projCoords.z > 1.0)
+    {
+        return 0.0;
+    }
+
+    float closestDepth = texture(uShadowMap, projCoords.xy).r;
+    float currentDepth = projCoords.z;
+
+    // Simple constant bias
+    float bias = 0.001;
+
+    return currentDepth - bias > closestDepth ? 1.0 : 0.0;
+}
+
 
 // ----------------------------------------------------------------------------
 // TODO: unify models props.
@@ -195,10 +226,9 @@ void main() {
 
   vec3 F0 = vec3(0.04);
 
-  // Use for blinn-phong
   vec3 normal   = normalize(o_normal);
   vec3 lightDir = normalize(sunDir);
-  vec3 viewDir  = normalize(cameraPos - o_worldPos);
+  vec3 viewDir  = normalize(playerCameraPos - o_worldPos);
   vec3 halfway  = normalize(lightDir + viewDir);
   vec4 texColor = texture(uTex, o_tex);
   vec3 normalDir = texture(uNormal, o_tex).xyz;
@@ -216,7 +246,7 @@ void main() {
   vec4 mr = texture(uMetallicRoughness, o_tex);
   roughness = max(roughness, 0.04); // Safety to avoid extreme brightness.
   vec3 N = getNormalFromMap();
-  vec3 V = normalize(cameraPos - o_worldPos);
+  vec3 V = normalize(playerCameraPos - o_worldPos);
   vec3 radiance = sunColor;
 
   vec3 lighting = BRDF_GGX(
@@ -234,9 +264,11 @@ void main() {
 
   vec3 tangentNormal = texture(uNormal, o_tex).xyz;
 
+  float shadow = ShadowCalculation(o_fragPosLightSpace);
+
   // vec3 lighting = blinnPhong(normal, lightDir, viewDir, halfway, texColor);
 
-  vec3 color = (ambient + lighting);
+  vec3 color = ambient + (1.0 - shadow) * lighting;
 
   // HDR tonemaping
   color = color / (color + vec3(1.0));

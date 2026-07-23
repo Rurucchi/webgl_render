@@ -25,7 +25,7 @@ export async function prepareAssets(gl: WebGL2RenderingContext) {
     assetsPath,
   );
 
-  console.log(processedGLTF);
+  // console.log(processedGLTF);
 
   if (processedGLTF) {
     // Meshes

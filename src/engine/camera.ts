@@ -16,6 +16,7 @@ export default class Camera {
   public projectionMatrix: mat4 = mat4.create();
   public inverseProjectionMatrix: mat4 = mat4.create();
   public bufferSize: number;
+  public floatCount: number;
   public mode: "orthographic" | "perspective";
   public orthoSize: number = 0;
 
@@ -36,6 +37,7 @@ export default class Camera {
     this.pitch = pitch;
     this.fov = fov;
     this.bufferSize = this.getBufferSize();
+    this.floatCount = this.getFloatCount();
 
     // default camera mode is perspective.
     if (mode === "orthographic") {
@@ -49,7 +51,7 @@ export default class Camera {
     }
   }
 
-  // Buffer size for ubo
+  // Buffer size for ubo (in bytes)
   getBufferSize(): number {
     let bufferSize: number =
       // view matrix
@@ -60,6 +62,18 @@ export default class Camera {
       4 * 4;
 
     return bufferSize;
+  }
+
+  getFloatCount(): number {
+    let floatCount: number =
+      // view matrix
+      16 +
+      // projectionMatrix
+      16 +
+      // position vector (std140 layout rounds it to 16 bytes)
+      4;
+
+    return floatCount;
   }
 
   // Camera movements

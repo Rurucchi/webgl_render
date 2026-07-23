@@ -21,6 +21,8 @@ import shadowVS from "./shaders/shadow.vert?raw";
 import shadowFS from "./shaders/shadow.frag?raw";
 import renderVS from "./shaders/render.vert?raw";
 import renderFS from "./shaders/render.frag?raw";
+import debugVS from "./shaders/debug.vert?raw";
+import debugFS from "./shaders/debug.frag?raw";
 
 export type RenderContext = {
   // General OpenGL states and context
@@ -55,6 +57,14 @@ export type RenderContext = {
     // Pass specific parameters
     sunBuffer: WebGLBuffer | null;
     cameraBuffer: WebGLBuffer | null;
+  };
+
+  debugPassContext: {
+    VS: WebGLShader | null;
+    FS: WebGLShader | null;
+    program: WebGLProgram | null;
+    vao: WebGLVertexArrayObject | null;
+    vbo: WebGLBuffer | null;
   };
 };
 
@@ -93,6 +103,14 @@ export function setupRendererContext(
       sunBuffer: null,
       cameraBuffer: null,
     },
+
+    debugPassContext: {
+      VS: null,
+      FS: null,
+      program: null,
+      vao: null,
+      vbo: null,
+    },
   };
 
   return renderContext;
@@ -119,7 +137,8 @@ export const renderBackend = {
         const status = gl.getProgramParameter(program, gl.LINK_STATUS);
         if (!status) {
           const error = gl.getShaderInfoLog(fragShader);
-          throw 'Could not link program "' + '" \n' + error;
+          const error2 = gl.getProgramInfoLog(program);
+          throw `Could not link program "${error2}" \n`;
         }
       }
 
@@ -301,6 +320,13 @@ export const renderBackend = {
           }
         }
 
+        // Shadow map
+        gl.activeTexture(gl.TEXTURE3);
+        gl.bindTexture(
+          gl.TEXTURE_2D,
+          renderContext.shadowPassContext.shadowmapTexture,
+        );
+
         if (mat?.doubleSided) {
           gl.disable(gl.CULL_FACE);
           gl.cullFace(gl.FRONT_AND_BACK);
@@ -339,7 +365,7 @@ const shadowPass = {
       program,
       "shadowCamera",
     );
-    const shadowCamBindingPoint = 0;
+    const shadowCamBindingPoint = 4;
     gl.uniformBlockBinding(program, shadowCamBlockIndex, shadowCamBindingPoint);
     gl.bindBufferBase(
       gl.UNIFORM_BUFFER,
@@ -347,7 +373,7 @@ const shadowPass = {
       renderContext.shadowPassContext.cameraBuffer,
     );
     // Shadowmap
-    renderContext.shadowPassContext.shadowmapResolution = 1024;
+    renderContext.shadowPassContext.shadowmapResolution = 4096;
     renderContext.shadowPassContext.shadowmapFramebuffer =
       gl.createFramebuffer();
     renderContext.shadowPassContext.shadowmapTexture = gl.createTexture();
@@ -467,12 +493,15 @@ const renderPass = {
     gl.useProgram(program);
     gl.viewport(0, 0, renderContext.canvas.width, renderContext.canvas.height);
 
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
     // Setup Camera UBO
     const cameraBuffer = gl.createBuffer();
     gl.bindBuffer(gl.UNIFORM_BUFFER, cameraBuffer);
-    gl.bufferData(gl.UNIFORM_BUFFER, gameCamera.bufferSize, gl.DYNAMIC_DRAW);
+    // Buffer size * 2 for both cameras.
+    gl.bufferData(
+      gl.UNIFORM_BUFFER,
+      gameCamera.bufferSize * 2,
+      gl.DYNAMIC_DRAW,
+    );
     const camBlockIndex = gl.getUniformBlockIndex(program, "Camera");
     const camBindingPoint = 0;
     gl.uniformBlockBinding(program, camBlockIndex, camBindingPoint);
@@ -498,6 +527,8 @@ const renderPass = {
       "uMetallicRoughness",
     );
     gl.uniform1i(metallicSamplerSamplerLoc, 2); // 2 = TEXTURE2
+    const shadowSamplerLoc = gl.getUniformLocation(program, "uShadowMap");
+    gl.uniform1i(shadowSamplerLoc, 3); // 3 = TEXTURE3
 
     // AlphaCutoff
     const useAlphaMaskLoc = gl.getUniformLocation(program, "uUseAlphaMask");
@@ -514,16 +545,36 @@ const renderPass = {
     gl.useProgram(null);
   },
 
-  render(renderContext: RenderContext, assets: Assets, gameCamera: Camera) {
+  render(
+    renderContext: RenderContext,
+    assets: Assets,
+    gameCamera: Camera,
+    shadowCamera: Camera,
+  ) {
     const gl = renderContext.gl;
     const renderPassContext = renderContext.renderPassContext;
 
-    const cameraData = new Float32Array(16 + 16 + 4);
+    const cameraData = new Float32Array(
+      gameCamera.floatCount + shadowCamera.floatCount,
+    );
 
-    cameraData.set(gameCamera.viewMatrix, 0); // mat4
-    cameraData.set(gameCamera.projectionMatrix, 16); // mat4
-    cameraData.set(gameCamera.position, 32);
-    cameraData[35] = 1.0; // padding
+    // note: following offsets are in floats.
+    let offset = 0;
+    cameraData.set(gameCamera.viewMatrix, offset);
+    offset += 16; // mat4
+    cameraData.set(gameCamera.projectionMatrix, offset);
+    offset += 16; // mat4
+    cameraData.set(gameCamera.position, offset);
+    offset += 3; // vec3
+    cameraData[offset] = 1.0; // padding
+    offset += 1;
+    cameraData.set(shadowCamera.viewMatrix, offset);
+    offset += 16; // mat4
+    cameraData.set(shadowCamera.projectionMatrix, offset);
+    offset += 16; // mat4
+    cameraData.set(shadowCamera.position, offset);
+    offset += 3; // vec3
+    cameraData[offset] = 1.0; // padding
 
     // sun
     const sun: Sun = {
@@ -540,7 +591,8 @@ const renderPass = {
 
     gl.useProgram(renderPassContext.program);
 
-    gl.clearColor(0.5, 0.6, 0.7, 0.5);
+    gl.clearColor(0.0, 0.407, 0.66, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     // Depth testing
     gl.enable(gl.DEPTH_TEST);
@@ -590,8 +642,87 @@ const renderPass = {
   },
 };
 
+// Display shadowmap texture at the corner of the screen
+const debugPass = {
+  prepare(renderContext: RenderContext) {
+    const gl = renderContext.gl;
+
+    const VS = renderBackend.shader.compileVS(gl, debugVS);
+    const FS = renderBackend.shader.compileFS(gl, debugFS);
+
+    const program = renderBackend.shader.bindShaders(renderContext, VS, FS);
+
+    gl.useProgram(program);
+
+    const shadowSamplerLoc = gl.getUniformLocation(program, "uShadowMap");
+    gl.uniform1i(shadowSamplerLoc, 3); // 3 = TEXTURE3
+
+    // Hardcoded for debug.
+    const quadVertices = new Float32Array([
+      -1.0, -1.0, 0.0, 0.0, 1.0, -1.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0, 1.0, 1.0,
+      1.0, 1.0,
+    ]);
+
+    const vao = gl.createVertexArray()!;
+    const vbo = gl.createBuffer()!;
+
+    gl.bindVertexArray(vao);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
+
+    // location = 0 -> vec2 position
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 4 * 4, 0);
+
+    // location = 1 -> vec2 uv
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 4 * 4, 2 * 4);
+
+    gl.bindVertexArray(null);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+    renderContext.debugPassContext.VS = VS;
+    renderContext.debugPassContext.FS = FS;
+    renderContext.debugPassContext.program = program;
+    renderContext.debugPassContext.vao = vao;
+    renderContext.debugPassContext.vbo = vbo;
+  },
+
+  render(renderContext: RenderContext) {
+    const gl = renderContext.gl;
+    const context = renderContext.debugPassContext;
+    gl.useProgram(context.program);
+
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.CULL_FACE);
+
+    gl.viewport(gl.canvas.width - 256, gl.canvas.height - 256, 256, 256);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(
+      gl.TEXTURE_2D,
+      renderContext.shadowPassContext.shadowmapTexture,
+    );
+
+    if (context.program) {
+      gl.uniform1i(gl.getUniformLocation(context.program, "uShadowMap"), 0);
+    }
+
+    gl.bindVertexArray(renderContext.debugPassContext.vao);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    gl.bindVertexArray(null);
+
+    // Restore viewport
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+  },
+};
+
 // Interface
 export const Renderer = {
   shadowPass: shadowPass,
   renderPass: renderPass,
+  debugPass: debugPass,
 };

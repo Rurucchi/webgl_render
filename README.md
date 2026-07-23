@@ -6,12 +6,15 @@ A WebGL renderer built from scratch, GLTF loading, real-time lighting and a firs
 
 - GLTF scene loading
 - Cook Torrance GGX lighting model | Blinn-Phong lighting model (has to be switched in the fragment shader)
+- Shadowmapping
+- Post processing pass
 - Camera system
+- Input and movement system
 - Raw WebGL
 
 ## Requirements:
 
-- Node.js 25
+- Node.js 22
 - Web browser with WebGL2 support
 - Keyboard and Mouse for controls
 

@@ -64,7 +64,7 @@ class Engine {
       degToRad(230),
       degToRad(90),
       "orthographic",
-      20,
+      21.5,
     );
 
     // inputs
@@ -74,6 +74,7 @@ class Engine {
     const renderContext = setupRendererContext(gl, canvas);
     Renderer.renderPass.prepare(renderContext, camera);
     Renderer.shadowPass.prepare(renderContext, shadowCamera);
+    Renderer.debugPass.prepare(renderContext);
 
     this.width = this.canvas.width;
     this.height = this.canvas.height;
@@ -153,8 +154,12 @@ class Engine {
     // update camera viewport
     this.camera.viewportWidth = this.width;
     this.camera.viewportHeight = this.height;
-    this.shadowCamera.viewportWidth = this.width;
-    this.shadowCamera.viewportHeight = this.height;
+    if (this.renderContext.shadowPassContext.shadowmapResolution) {
+      this.shadowCamera.viewportWidth =
+        this.renderContext.shadowPassContext.shadowmapResolution; // Shadowmap resolution
+      this.shadowCamera.viewportHeight =
+        this.renderContext.shadowPassContext.shadowmapResolution;
+    }
 
     // update camera pitch/yaw
     this.camera.pitch -= this.input.mousePos.y * 0.005;
@@ -184,7 +189,7 @@ class Engine {
     ImGui.Begin("Controls");
     ImGui.Text("Use W/A/S/D and Space/Shift to move around the scene!");
     if (ImGui.Button("Control Camera")) {
-      console.log("changed mouse mode");
+      // console.log("changed mouse mode");
       this.input.mouseFree = false;
       const canvas = document.getElementById("game");
       canvas?.requestPointerLock();
@@ -208,8 +213,7 @@ class Engine {
       "pitch:" + (this.camera.pitch * (180 / Math.PI)).toFixed(3) + "°",
     );
     ImGui.Text("yaw:" + (this.camera.yaw * (180 / Math.PI)).toFixed(1) + "°");
-    ImGui.Text("Mouse free:" + this.input.mouseFree);
-    ImGui.Text("Shadowmap:");
+    // ImGui.Text("Mouse free:" + this.input.mouseFree);
 
     ImGui.CloseCurrentPopup();
     ImGui.End();
@@ -222,7 +226,13 @@ class Engine {
         this.assets,
         this.shadowCamera,
       );
-      Renderer.renderPass.render(this.renderContext, this.assets, this.camera);
+      Renderer.renderPass.render(
+        this.renderContext,
+        this.assets,
+        this.camera,
+        this.shadowCamera,
+      );
+      Renderer.debugPass.render(this.renderContext);
     }
 
     // viewport
@@ -243,6 +253,8 @@ class Engine {
   resize(width: number, height: number) {
     this.renderContext.canvas.width = width;
     this.renderContext.canvas.height = height;
+    this.width = width;
+    this.height = height;
   }
 
   dispose() {}
