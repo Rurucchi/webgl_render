@@ -194,7 +194,7 @@ vec3 ambientLight(vec3 N, vec3 albedo, float metallic) {
 }
 
 // ----------------------------------------------------------------------------
-float ShadowCalculation(vec4 fragPosLightSpace)
+float ShadowCalculation(vec4 fragPosLightSpace, vec3 N)
 {
     // Perspective divide (works for orthographic too, since w == 1)
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
@@ -209,14 +209,32 @@ float ShadowCalculation(vec4 fragPosLightSpace)
     {
         return 0.0;
     }
-
-    float closestDepth = texture(uShadowMap, projCoords.xy).r;
     float currentDepth = projCoords.z;
 
-    // Simple constant bias
-    float bias = 0.001;
+    // Better bias (optional)
+    float bias = max(0.0005 * (1.0 - dot(N, normalize(-sunDir))),
+                    0.0001);
 
-    return currentDepth - bias > closestDepth ? 1.0 : 0.0;
+    vec2 texelSize = 1.0 / vec2(textureSize(uShadowMap, 0));
+
+    float shadow = 0.0;
+
+    for (int x = -1; x <= 1; ++x)
+    {
+        for (int y = -1; y <= 1; ++y)
+        {
+            float pcfDepth = texture(
+                uShadowMap,
+                projCoords.xy + vec2(float(x), float(y)) * texelSize
+            ).r;
+
+            shadow += (currentDepth - bias > pcfDepth) ? 1.0 : 0.0;
+        }
+    }
+
+    shadow /= 9.0;
+
+    return shadow;
 }
 
 
@@ -264,7 +282,7 @@ void main() {
 
   vec3 tangentNormal = texture(uNormal, o_tex).xyz;
 
-  float shadow = ShadowCalculation(o_fragPosLightSpace);
+  float shadow = ShadowCalculation(o_fragPosLightSpace, N);
 
   // vec3 lighting = blinnPhong(normal, lightDir, viewDir, halfway, texColor);
 

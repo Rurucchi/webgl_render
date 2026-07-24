@@ -43,6 +43,7 @@ https://github.com/mori2003/jsimgui
 
 ### Credits
 
-https://learnopengl.com for shader code.
-https://github.com/gnikoloff/webgpu-sponza-demo for Sponza assets used.
+https://learnopengl.com for shader code and the skybox texture.
+https://www.fabiensanglard.net/shadowmappingPCF/index.php and https://www.shadertoy.com/view/lsKcDD for PCF implementation.
+https://www.intel.com/content/www/us/en/developer/topic-technology/graphics-research/samples.html and https://github.com/gnikoloff/webgpu-sponza-demo and for Sponza assets used.
 @Xrhoys for some sample code used.
