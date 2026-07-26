@@ -1,22 +1,27 @@
 import { initMeshBuffer, MeshBuffer } from "./mesh";
-import { Texture } from "./texture";
+import { Texture, createSkyboxCubeMap } from "./texture";
 import { Material } from "./material";
 import { Sampler } from "./sampler";
 import { GLTFModel } from "../scene/GLTFModel";
+import { createSkybox, Skybox } from "./skybox";
 
 export type Assets = {
   meshBuffer: MeshBuffer;
   texBuffer: Array<Texture>;
   matBuffer: Array<Material>;
   samplerBuffer: Array<Sampler>;
+  skybox: Skybox;
 };
 
 export async function prepareAssets(gl: WebGL2RenderingContext) {
+  const skybox: Skybox = await createSkybox(gl);
+
   const assets: Assets = {
     meshBuffer: initMeshBuffer(),
     texBuffer: new Array<Texture>(),
     matBuffer: new Array<Material>(),
     samplerBuffer: new Array<Sampler>(),
+    skybox: skybox,
   };
 
   const assetsPath = `${import.meta.env.BASE_URL}assets/Sponza.gltf`;

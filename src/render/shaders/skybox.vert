@@ -1,9 +1,9 @@
 #version 300 es
 precision highp float;
 
-layout(location = 0) in vec2 i_pos;
+layout(location = 0) in vec3 i_pos;
 
-out vec2 o_uv;
+out vec3 o_tex;
 
 layout(std140) uniform Camera {
   mat4 view;
@@ -13,6 +13,8 @@ layout(std140) uniform Camera {
 
 void main()
 {
-    o_uv = i_pos;
-    gl_Position = projection * view * vec4(i_pos, 1.0);
+  o_tex = i_pos;
+  mat3 rot = mat3(view);
+  vec4 pos = projection * vec4(rot * i_pos, 1.0);
+  gl_Position = pos.xyww;
 }  

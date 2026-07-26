@@ -21,6 +21,8 @@ import shadowVS from "./shaders/shadow.vert?raw";
 import shadowFS from "./shaders/shadow.frag?raw";
 import renderVS from "./shaders/render.vert?raw";
 import renderFS from "./shaders/render.frag?raw";
+import skyboxVS from "./shaders/skybox.vert?raw";
+import skyboxFS from "./shaders/skybox.frag?raw";
 import debugVS from "./shaders/debug.vert?raw";
 import debugFS from "./shaders/debug.frag?raw";
 
@@ -56,6 +58,17 @@ export type RenderContext = {
 
     // Pass specific parameters
     sunBuffer: WebGLBuffer | null;
+    cameraBuffer: WebGLBuffer | null;
+  };
+
+  // used in RenderPass
+  skyboxContext: {
+    // Generic OpenGL parameters
+    VS: WebGLShader | null;
+    FS: WebGLShader | null;
+    program: WebGLProgram | null;
+
+    // Pass specific parameters
     cameraBuffer: WebGLBuffer | null;
   };
 
@@ -101,6 +114,13 @@ export function setupRendererContext(
 
       // Pass specific parameters
       sunBuffer: null,
+      cameraBuffer: null,
+    },
+
+    skyboxContext: {
+      VS: null,
+      FS: null,
+      program: null,
       cameraBuffer: null,
     },
 
@@ -343,6 +363,20 @@ export const renderBackend = {
       gl.bindSampler(1, null);
       gl.bindSampler(2, null);
     },
+
+    renderSkybox(renderContext: RenderContext, assets: Assets) {
+      const gl = renderContext.gl;
+      const skybox = assets.skybox;
+
+      gl.bindVertexArray(skybox.vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, skybox.vbo);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, skybox.ibo);
+
+      gl.activeTexture(gl.TEXTURE4);
+      gl.bindTexture(gl.TEXTURE_CUBE_MAP, skybox.texture);
+
+      gl.drawElements(gl.TRIANGLES, skybox.indexCount, gl.UNSIGNED_SHORT, 0);
+    },
   },
 };
 
@@ -399,8 +433,6 @@ const shadowPass = {
 
     // no color attachment
     gl.drawBuffers([gl.NONE]);
-
-    console.log(gl.checkFramebufferStatus(gl.FRAMEBUFFER));
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
@@ -543,6 +575,39 @@ const renderPass = {
     renderContext.renderPassContext.FS = FS;
 
     gl.useProgram(null);
+
+    // Skybox preparing
+
+    // ---- This could be it's own function but kept here for simplicity
+    const skyVS = renderBackend.shader.compileVS(gl, skyboxVS);
+    const skyFS = renderBackend.shader.compileFS(gl, skyboxFS);
+
+    const skyProgram = renderBackend.shader.bindShaders(
+      renderContext,
+      skyVS,
+      skyFS,
+    );
+    gl.useProgram(skyProgram);
+
+    // Setup Camera UBO
+    const skyCameraBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.UNIFORM_BUFFER, skyCameraBuffer);
+    // Buffer size * 2 for both cameras.
+    gl.bufferData(gl.UNIFORM_BUFFER, gameCamera.bufferSize, gl.DYNAMIC_DRAW);
+    const skyCamBlockIndex = gl.getUniformBlockIndex(skyProgram, "Camera");
+    const skyCamBindingPoint = 0;
+    gl.uniformBlockBinding(skyProgram, skyCamBlockIndex, skyCamBindingPoint);
+    gl.bindBufferBase(gl.UNIFORM_BUFFER, skyCamBindingPoint, skyCameraBuffer);
+
+    const skyboxSamplerLoc = gl.getUniformLocation(skyProgram, "uSkybox");
+    gl.uniform1i(skyboxSamplerLoc, 4); // 4 = TEXTURE4
+
+    renderContext.skyboxContext.VS = skyVS;
+    renderContext.skyboxContext.FS = skyFS;
+    renderContext.skyboxContext.cameraBuffer = skyCameraBuffer;
+    renderContext.skyboxContext.program = skyProgram;
+
+    gl.useProgram(null);
   },
 
   render(
@@ -553,6 +618,7 @@ const renderPass = {
   ) {
     const gl = renderContext.gl;
     const renderPassContext = renderContext.renderPassContext;
+    const skyboxContext = renderContext.renderPassContext;
 
     const cameraData = new Float32Array(
       gameCamera.floatCount + shadowCamera.floatCount,
@@ -591,7 +657,7 @@ const renderPass = {
 
     gl.useProgram(renderPassContext.program);
 
-    gl.clearColor(0.0, 0.407, 0.66, 1);
+    gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     // Depth testing
@@ -637,6 +703,32 @@ const renderPass = {
     assets.meshBuffer.blend.forEach((mesh) => {
       renderBackend.render.renderPassDrawMesh(renderContext, assets, mesh, 2);
     });
+
+    gl.useProgram(null);
+
+    // Draw skybox
+    const skyCameraData = new Float32Array(gameCamera.floatCount);
+
+    let skyOffset = 0;
+    skyCameraData.set(gameCamera.viewMatrix, skyOffset);
+    skyOffset += 16; // mat4
+    skyCameraData.set(gameCamera.projectionMatrix, skyOffset);
+    skyOffset += 16; // mat4
+    skyCameraData.set(gameCamera.position, skyOffset);
+    skyOffset += 3; // vec3
+    skyCameraData[skyOffset] = 1.0; // padding
+
+    gl.useProgram(renderContext.skyboxContext.program);
+
+    // bind Camera buffer
+    gl.bindBuffer(gl.UNIFORM_BUFFER, renderPassContext.cameraBuffer);
+    gl.bufferSubData(gl.UNIFORM_BUFFER, 0, skyCameraData);
+
+    gl.depthFunc(gl.LEQUAL);
+    gl.disable(gl.CULL_FACE);
+    // gl.cullFace(gl.FRONT);
+
+    renderBackend.render.renderSkybox(renderContext, assets);
 
     gl.useProgram(null);
   },
