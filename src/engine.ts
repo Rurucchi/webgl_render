@@ -40,6 +40,8 @@ class Engine {
   input: Input;
   toggleShadowMapCamera = false;
 
+  debugShadowMap: boolean;
+
   constructor(canvas: HTMLCanvasElement, gl: WebGL2RenderingContext) {
     this.canvas = canvas;
     this.gl = gl;
@@ -82,6 +84,8 @@ class Engine {
     this.camera = camera;
     this.shadowCamera = shadowCamera;
     this.input = input;
+    // debug
+    this.debugShadowMap = false;
   }
 
   async start() {
@@ -213,7 +217,10 @@ class Engine {
       "pitch:" + (this.camera.pitch * (180 / Math.PI)).toFixed(3) + "°",
     );
     ImGui.Text("yaw:" + (this.camera.yaw * (180 / Math.PI)).toFixed(1) + "°");
-    // ImGui.Text("Mouse free:" + this.input.mouseFree);
+    // This should be changed.
+    if (ImGui.Checkbox("Display Shadowmap Texture", [this.debugShadowMap])) {
+      this.debugShadowMap = !this.debugShadowMap;
+    }
 
     ImGui.CloseCurrentPopup();
     ImGui.End();
@@ -232,7 +239,9 @@ class Engine {
         this.camera,
         this.shadowCamera,
       );
-      Renderer.debugPass.render(this.renderContext);
+      if (this.debugShadowMap) {
+        Renderer.debugPass.render(this.renderContext);
+      }
     }
 
     // viewport

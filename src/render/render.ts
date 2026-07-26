@@ -5,7 +5,11 @@ import Camera from "../engine/camera";
 
 // Assets types
 import { Assets } from "../assets/assets";
-import { createDepthTexture, Texture } from "../assets/texture"; // Needed for shadowmap texture.
+import {
+  createDepthTexture,
+  createFramebufferTexture,
+  Texture,
+} from "../assets/texture"; // Needed for shadowmap texture.
 import { Mesh } from "../assets/mesh";
 import { Sampler } from "../assets/sampler";
 import { Material } from "../assets/material";
@@ -23,6 +27,8 @@ import renderVS from "./shaders/render.vert?raw";
 import renderFS from "./shaders/render.frag?raw";
 import skyboxVS from "./shaders/skybox.vert?raw";
 import skyboxFS from "./shaders/skybox.frag?raw";
+import postVS from "./shaders/postProcessing.vert?raw";
+import postFS from "./shaders/postProcessing.frag?raw";
 import debugVS from "./shaders/debug.vert?raw";
 import debugFS from "./shaders/debug.frag?raw";
 
@@ -59,6 +65,8 @@ export type RenderContext = {
     // Pass specific parameters
     sunBuffer: WebGLBuffer | null;
     cameraBuffer: WebGLBuffer | null;
+    renderTexture: WebGLTexture | null;
+    renderFramebuffer: WebGLFramebuffer | null;
   };
 
   // used in RenderPass
@@ -70,6 +78,14 @@ export type RenderContext = {
 
     // Pass specific parameters
     cameraBuffer: WebGLBuffer | null;
+  };
+
+  postProcessingPassContext: {
+    VS: WebGLShader | null;
+    FS: WebGLShader | null;
+    program: WebGLProgram | null;
+    vao: WebGLVertexArrayObject | null;
+    vbo: WebGLBuffer | null;
   };
 
   debugPassContext: {
@@ -115,6 +131,8 @@ export function setupRendererContext(
       // Pass specific parameters
       sunBuffer: null,
       cameraBuffer: null,
+      renderTexture: null,
+      renderFramebuffer: null,
     },
 
     skyboxContext: {
@@ -122,6 +140,14 @@ export function setupRendererContext(
       FS: null,
       program: null,
       cameraBuffer: null,
+    },
+
+    postProcessingPassContext: {
+      VS: null,
+      FS: null,
+      program: null,
+      vao: null,
+      vbo: null,
     },
 
     debugPassContext: {
@@ -499,11 +525,6 @@ const shadowPass = {
       renderBackend.render.shadowPassDrawMesh(gl, mesh);
     });
 
-    // Framebuffer
-    // gl.bindFramebuffer(gl.FRAMEBUFFER, shadowPassContext.shadowmapFramebuffer);
-    // const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
-    // console.log(status === gl.FRAMEBUFFER_COMPLETE, status);
-
     gl.bindTexture(gl.TEXTURE_2D, null);
 
     // Disable Depth testing
@@ -564,6 +585,24 @@ const renderPass = {
 
     // AlphaCutoff
     const useAlphaMaskLoc = gl.getUniformLocation(program, "uUseAlphaMask");
+
+    // const renderTex = gl.createFramebuffer();
+
+    // renderContext.renderPassContext.renderTexture = gl.createTexture();
+    // createFramebufferTexture(gl, renderTex,renderContext.canvas.width, renderContext.canvas.height)
+
+    // gl.bindFramebuffer(
+    //   gl.FRAMEBUFFER,
+    //   renderContext.renderPassContext.renderFramebuffer,
+    // );
+
+    // gl.framebufferTexture2D(
+    //   gl.FRAMEBUFFER,
+    //   gl.COLOR_ATTACHMENT0,
+    //   gl.TEXTURE_2D,
+    //   renderContext.renderPassContext.renderFramebuffer,
+    //   0,
+    // );
 
     // rendering context
     renderContext.renderPassContext.program = program;
@@ -735,6 +774,80 @@ const renderPass = {
 };
 
 // Display shadowmap texture at the corner of the screen
+const postProcessingPass = {
+  prepare(renderContext: RenderContext) {
+    const gl = renderContext.gl;
+
+    const VS = renderBackend.shader.compileVS(gl, postVS);
+    const FS = renderBackend.shader.compileFS(gl, postFS);
+
+    const program = renderBackend.shader.bindShaders(renderContext, VS, FS);
+
+    gl.useProgram(program);
+
+    const renderSamplerLoc = gl.getUniformLocation(program, "uRenderFrame");
+    gl.uniform1i(renderSamplerLoc, 5); // 5 = TEXTURE5
+
+    // Hardcoded for debug.
+    const quadVertices = new Float32Array([
+      -1.0, -1.0, 0.0, 0.0, 1.0, -1.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0, 1.0, 1.0,
+      1.0, 1.0,
+    ]);
+
+    const vao = gl.createVertexArray()!;
+    const vbo = gl.createBuffer()!;
+
+    gl.bindVertexArray(vao);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
+
+    // location = 0 -> vec2 position
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 4 * 4, 0);
+
+    // location = 1 -> vec2 uv
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 4 * 4, 2 * 4);
+
+    gl.bindVertexArray(null);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+    renderContext.postProcessingPassContext.VS = VS;
+    renderContext.postProcessingPassContext.FS = FS;
+    renderContext.postProcessingPassContext.program = program;
+    renderContext.postProcessingPassContext.vao = vao;
+    renderContext.postProcessingPassContext.vbo = vbo;
+  },
+
+  render(renderContext: RenderContext) {
+    const gl = renderContext.gl;
+    const context = renderContext.postProcessingPassContext;
+    gl.useProgram(context.program);
+
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.CULL_FACE);
+
+    gl.viewport(0, 0, renderContext.canvas.width, renderContext.canvas.height);
+
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(
+      gl.TEXTURE_2D,
+      renderContext.renderPassContext.renderTexture,
+    );
+
+    gl.bindVertexArray(renderContext.postProcessingPassContext.vao);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    gl.bindVertexArray(null);
+
+    // Restore viewport
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+  },
+};
+
+// Display shadowmap texture at the corner of the screen
 const debugPass = {
   prepare(renderContext: RenderContext) {
     const gl = renderContext.gl;
@@ -747,7 +860,7 @@ const debugPass = {
     gl.useProgram(program);
 
     const shadowSamplerLoc = gl.getUniformLocation(program, "uShadowMap");
-    gl.uniform1i(shadowSamplerLoc, 3); // 3 = TEXTURE3
+    gl.uniform1i(shadowSamplerLoc, 6); // 6 = TEXTURE6
 
     // Hardcoded for debug.
     const quadVertices = new Float32Array([
@@ -791,15 +904,11 @@ const debugPass = {
 
     gl.viewport(gl.canvas.width - 256, gl.canvas.height - 256, 256, 256);
 
-    gl.activeTexture(gl.TEXTURE0);
+    gl.activeTexture(gl.TEXTURE6);
     gl.bindTexture(
       gl.TEXTURE_2D,
       renderContext.shadowPassContext.shadowmapTexture,
     );
-
-    if (context.program) {
-      gl.uniform1i(gl.getUniformLocation(context.program, "uShadowMap"), 0);
-    }
 
     gl.bindVertexArray(renderContext.debugPassContext.vao);
 
@@ -817,4 +926,5 @@ export const Renderer = {
   shadowPass: shadowPass,
   renderPass: renderPass,
   debugPass: debugPass,
+  postProcessingPass: postProcessingPass,
 };

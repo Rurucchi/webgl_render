@@ -53,7 +53,7 @@ export async function createTexture(
   return texture;
 }
 
-export async function createDepthTexture(
+export function createDepthTexture(
   gl: WebGL2RenderingContext,
   glTex: WebGLTexture,
   width: number,
@@ -80,6 +80,32 @@ export async function createDepthTexture(
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
   gl.bindTexture(gl.TEXTURE_2D, null);
+}
+
+export function createFramebufferTexture(
+  gl: WebGL2RenderingContext,
+  glTex: WebGLTexture,
+  width: number,
+  height: number,
+) {
+  gl.bindTexture(gl.TEXTURE_2D, glTex);
+
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RGBA16F, // HDR
+    width,
+    height,
+    0,
+    gl.RGBA,
+    gl.HALF_FLOAT,
+    null,
+  );
+
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 }
 
 // this should not be hardcoded

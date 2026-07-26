@@ -148,7 +148,7 @@ vec3 BRDF_GGX(
 
     return
         (kD * albedo / PI + specular) *
-        (radiance * 3.5) *
+        (radiance * 10.0) *
         NdotL;
 }
 
