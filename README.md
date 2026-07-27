@@ -1,6 +1,6 @@
 # WebGL Sponza Renderer
 
-A WebGL renderer built from scratch, GLTF loading, real-time lighting and a first-person camera system.
+A WebGL renderer built from scratch, featuring GLTF loading, real-time lighting and a first-person camera system.
 
 ## Features
 
@@ -11,7 +11,16 @@ A WebGL renderer built from scratch, GLTF loading, real-time lighting and a firs
 - Post processing pass
 - Camera system
 - Input and movement system
-- Raw WebGL
+
+## Preview
+
+![scene](https://github.com/Rurucchi/webgl_render/blob/main/screenshots/screenshot_1.png)
+
+![materials](https://github.com/Rurucchi/webgl_render/blob/main/screenshots/screenshot_2.png)
+
+![debugging](https://github.com/Rurucchi/webgl_render/blob/main/screenshots/screenshot_3.png)
+
+![skybox](https://github.com/Rurucchi/webgl_render/blob/main/screenshots/screenshot_4.png)
 
 ## Requirements:
 
