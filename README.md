@@ -7,6 +7,7 @@ A WebGL renderer built from scratch, GLTF loading, real-time lighting and a firs
 - GLTF scene loading
 - Cook Torrance GGX lighting model | Blinn-Phong lighting model (has to be switched in the fragment shader)
 - Shadowmapping
+- Skybox
 - Post processing pass
 - Camera system
 - Input and movement system
