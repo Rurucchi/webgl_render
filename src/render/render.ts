@@ -66,7 +66,10 @@ export type RenderContext = {
     sunBuffer: WebGLBuffer | null;
     cameraBuffer: WebGLBuffer | null;
     renderTexture: WebGLTexture | null;
+    renderTextureWidth: number | null;
+    renderTextureHeight: number | null;
     renderFramebuffer: WebGLFramebuffer | null;
+    renderDepthBuffer: WebGLFramebuffer | null;
   };
 
   // used in RenderPass
@@ -132,7 +135,10 @@ export function setupRendererContext(
       sunBuffer: null,
       cameraBuffer: null,
       renderTexture: null,
+      renderTextureWidth: null,
+      renderTextureHeight: null,
       renderFramebuffer: null,
+      renderDepthBuffer: null,
     },
 
     skyboxContext: {
@@ -163,7 +169,7 @@ export function setupRendererContext(
 }
 
 // This is not used outside of this file, but exposed for sanity.
-export const renderBackend = {
+const renderBackend = {
   // Shader related functions.
   shader: {
     bindShaders(
@@ -403,6 +409,47 @@ export const renderBackend = {
 
       gl.drawElements(gl.TRIANGLES, skybox.indexCount, gl.UNSIGNED_SHORT, 0);
     },
+
+    resizeRenderTarget(
+      renderContext: RenderContext,
+      width: number,
+      height: number,
+    ) {
+      const gl = renderContext.gl;
+
+      if (
+        width !== renderContext.renderPassContext.renderTextureWidth ||
+        height !== renderContext.renderPassContext.renderTextureHeight
+      ) {
+        // Reallocate texture, handles stays unchanged.
+        gl.bindTexture(
+          gl.TEXTURE_2D,
+          renderContext.renderPassContext.renderTexture,
+        );
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          gl.RGBA16F, // HDR
+          width,
+          height,
+          0,
+          gl.RGBA,
+          gl.FLOAT,
+          null,
+        );
+
+        gl.bindRenderbuffer(
+          gl.RENDERBUFFER,
+          renderContext.renderPassContext.renderDepthBuffer,
+        );
+        gl.renderbufferStorage(
+          gl.RENDERBUFFER,
+          gl.DEPTH_COMPONENT24,
+          width,
+          height,
+        );
+      }
+    },
   },
 };
 
@@ -586,23 +633,41 @@ const renderPass = {
     // AlphaCutoff
     const useAlphaMaskLoc = gl.getUniformLocation(program, "uUseAlphaMask");
 
-    // const renderTex = gl.createFramebuffer();
+    const framebuffer = gl.createFramebuffer();
+    const colorTex = gl.createTexture();
+    createFramebufferTexture(
+      gl,
+      colorTex,
+      renderContext.canvas.width,
+      renderContext.canvas.height,
+    );
 
-    // renderContext.renderPassContext.renderTexture = gl.createTexture();
-    // createFramebufferTexture(gl, renderTex,renderContext.canvas.width, renderContext.canvas.height)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
 
-    // gl.bindFramebuffer(
-    //   gl.FRAMEBUFFER,
-    //   renderContext.renderPassContext.renderFramebuffer,
-    // );
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.COLOR_ATTACHMENT0,
+      gl.TEXTURE_2D,
+      colorTex,
+      0,
+    );
 
-    // gl.framebufferTexture2D(
-    //   gl.FRAMEBUFFER,
-    //   gl.COLOR_ATTACHMENT0,
-    //   gl.TEXTURE_2D,
-    //   renderContext.renderPassContext.renderFramebuffer,
-    //   0,
-    // );
+    // Depth buffer is needed for testing
+    const depthBuffer = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, depthBuffer);
+    gl.renderbufferStorage(
+      gl.RENDERBUFFER,
+      gl.DEPTH_COMPONENT24,
+      renderContext.canvas.width,
+      renderContext.canvas.height,
+    );
+
+    gl.framebufferRenderbuffer(
+      gl.FRAMEBUFFER,
+      gl.DEPTH_ATTACHMENT,
+      gl.RENDERBUFFER,
+      depthBuffer,
+    );
 
     // rendering context
     renderContext.renderPassContext.program = program;
@@ -612,6 +677,9 @@ const renderPass = {
     renderContext.renderPassContext.sunBuffer = sunBuffer;
     renderContext.renderPassContext.VS = VS;
     renderContext.renderPassContext.FS = FS;
+    renderContext.renderPassContext.renderFramebuffer = framebuffer;
+    renderContext.renderPassContext.renderTexture = colorTex;
+    renderContext.renderPassContext.renderDepthBuffer = depthBuffer;
 
     gl.useProgram(null);
 
@@ -657,7 +725,7 @@ const renderPass = {
   ) {
     const gl = renderContext.gl;
     const renderPassContext = renderContext.renderPassContext;
-    const skyboxContext = renderContext.renderPassContext;
+    const skyboxContext = renderContext.shadowPassContext;
 
     const cameraData = new Float32Array(
       gameCamera.floatCount + shadowCamera.floatCount,
@@ -691,8 +759,14 @@ const renderPass = {
     };
 
     // Reset framebuffer
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, renderPassContext.renderFramebuffer);
     gl.viewport(0, 0, renderContext.canvas.width, renderContext.canvas.height);
+
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(
+      gl.TEXTURE_2D,
+      renderContext.shadowPassContext.shadowmapTexture,
+    );
 
     gl.useProgram(renderPassContext.program);
 
@@ -788,7 +862,7 @@ const postProcessingPass = {
     const renderSamplerLoc = gl.getUniformLocation(program, "uRenderFrame");
     gl.uniform1i(renderSamplerLoc, 5); // 5 = TEXTURE5
 
-    // Hardcoded for debug.
+    // Full screen quad
     const quadVertices = new Float32Array([
       -1.0, -1.0, 0.0, 0.0, 1.0, -1.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0, 1.0, 1.0,
       1.0, 1.0,
@@ -823,10 +897,13 @@ const postProcessingPass = {
   render(renderContext: RenderContext) {
     const gl = renderContext.gl;
     const context = renderContext.postProcessingPassContext;
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
     gl.useProgram(context.program);
 
-    gl.disable(gl.DEPTH_TEST);
-    gl.disable(gl.CULL_FACE);
+    // gl.disable(gl.DEPTH_TEST);
+    // gl.disable(gl.CULL_FACE);
 
     gl.viewport(0, 0, renderContext.canvas.width, renderContext.canvas.height);
 
@@ -841,9 +918,6 @@ const postProcessingPass = {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     gl.bindVertexArray(null);
-
-    // Restore viewport
-    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
   },
 };
 
@@ -925,6 +999,7 @@ const debugPass = {
 export const Renderer = {
   shadowPass: shadowPass,
   renderPass: renderPass,
-  debugPass: debugPass,
   postProcessingPass: postProcessingPass,
+  debugPass: debugPass,
+  renderBackend: renderBackend,
 };

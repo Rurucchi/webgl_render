@@ -288,11 +288,12 @@ void main() {
 
   vec3 color = ambient + (1.0 - shadow) * lighting;
 
-  // HDR tonemaping
-  color = color / (color + vec3(1.0));
+    // This has been moved to post processing.
+    //   // HDR tonemaping
+    //   color = color / (color + vec3(1.0));
 
-  // gamma correction
-  color = pow(color, vec3(1.0 / 2.2));
+    //   // gamma correction
+    //   color = pow(color, vec3(1.0 / 2.2));
 
   frag_color = vec4(color, texColor.a);
 

@@ -12,11 +12,6 @@ import Input from "./engine/input";
 // GLTF
 import { Assets, prepareAssets } from "./assets/assets";
 
-/* Constants */
-
-// units per second
-const speed = 2;
-
 class Engine {
   // Rendering
   gl: WebGL2RenderingContext;
@@ -39,6 +34,8 @@ class Engine {
 
   input: Input;
   toggleShadowMapCamera = false;
+  sensitivity: [number] = [1];
+  speed: [number] = [2];
 
   debugShadowMap: boolean;
 
@@ -61,9 +58,9 @@ class Engine {
     const shadowCamera = new Camera(
       canvas.width,
       canvas.height,
-      vec3.fromValues(-1.5, 18, -1.7),
+      vec3.fromValues(-1.5, 16.9, -1.7),
       degToRad(-70),
-      degToRad(230),
+      degToRad(110),
       degToRad(90),
       "orthographic",
       21.5,
@@ -76,6 +73,7 @@ class Engine {
     const renderContext = setupRendererContext(gl, canvas);
     Renderer.renderPass.prepare(renderContext, camera);
     Renderer.shadowPass.prepare(renderContext, shadowCamera);
+    Renderer.postProcessingPass.prepare(renderContext);
     Renderer.debugPass.prepare(renderContext);
 
     this.width = this.canvas.width;
@@ -151,7 +149,7 @@ class Engine {
 
     if (vec3.length(movement) > 0) {
       vec3.normalize(movement, movement);
-      vec3.scale(movement, movement, speed / fps);
+      vec3.scale(movement, movement, this.speed[0] / fps);
       vec3.add(this.camera.position, this.camera.position, movement);
     }
 
@@ -166,8 +164,8 @@ class Engine {
     }
 
     // update camera pitch/yaw
-    this.camera.pitch -= this.input.mousePos.y * 0.005;
-    this.camera.yaw += this.input.mousePos.x * 0.005;
+    this.camera.pitch -= this.input.mousePos.y * 0.005 * this.sensitivity[0];
+    this.camera.yaw += this.input.mousePos.x * 0.005 * this.sensitivity[0];
 
     // clamp camera pitch/yaw
     const PITCH_LIMIT = Math.PI / 2 - 0.001; // 89.999
@@ -192,6 +190,8 @@ class Engine {
 
     ImGui.Begin("Controls");
     ImGui.Text("Use W/A/S/D and Space/Shift to move around the scene!");
+    ImGui.SliderFloat("Mouse sensitivity", this.sensitivity, 1, 10);
+    ImGui.SliderFloat("Camera speed", this.speed, 1, 10);
     if (ImGui.Button("Control Camera")) {
       // console.log("changed mouse mode");
       this.input.mouseFree = false;
@@ -239,6 +239,7 @@ class Engine {
         this.camera,
         this.shadowCamera,
       );
+      Renderer.postProcessingPass.render(this.renderContext);
       if (this.debugShadowMap) {
         Renderer.debugPass.render(this.renderContext);
       }
@@ -264,6 +265,11 @@ class Engine {
     this.renderContext.canvas.height = height;
     this.width = width;
     this.height = height;
+    Renderer.renderBackend.render.resizeRenderTarget(
+      this.renderContext,
+      width,
+      height,
+    );
   }
 
   dispose() {}

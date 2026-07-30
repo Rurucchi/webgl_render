@@ -130,7 +130,14 @@ export async function createSkyboxCubeMap(gl: WebGL2RenderingContext) {
     const blob = await response.blob();
     const bitmap = await createImageBitmap(blob);
 
-    gl.texImage2D(face.target, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+    gl.texImage2D(
+      face.target,
+      0,
+      gl.SRGB8_ALPHA8,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      bitmap,
+    );
   }
   const status = gl.getError();
 
